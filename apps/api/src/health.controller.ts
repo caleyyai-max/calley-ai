@@ -8,15 +8,11 @@ export class HealthController {
   @Get()
   async check() {
     const dbHealthy = await this.checkDatabase();
-
     return {
       status: dbHealthy ? "healthy" : "degraded",
       timestamp: new Date().toISOString(),
       version: process.env.npm_package_version || "1.0.0",
-      services: {
-        database: dbHealthy ? "connected" : "disconnected",
-        api: "running",
-      },
+      services: { database: dbHealthy ? "connected" : "disconnected", api: "running" },
       uptime: process.uptime(),
     };
   }
