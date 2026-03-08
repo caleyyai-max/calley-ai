@@ -1,0 +1,236 @@
+// OrderAI - AI Restaurant Phone Ordering SaaS
+// Prisma Schema for Supabase (PostgreSQL)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum CallStatus {
+  RINGING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  TRANSFERRED
+}
+
+enum SubscriptionTier {
+  FREE_TRIAL
+  STARTER
+  GROWTH
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  PAUSED
+  TRIALING
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+model Restaurant {
+  id                    String            @id @default(cuid())
+  name                  String
+  slug                  String            @unique
+  address               String?
+  phone                 String?
+  email                 String?
+  logoUrl               String?           @map("logo_url")
+  twilioPhoneNumber     String?           @unique @map("twilio_phone_number")
+  vapiAssistantId       String?           @unique @map("vapi_assistant_id")
+  timezone              String            @default("America/New_York")
+  isActive              Boolean           @default(true) @map("is_active")
+  businessHours         Json?             @map("business_hours") // { mon: { open: "09:00", close: "22:00" }, ... }
+  
+  // Auth & Billing
+  clerkOrgId            String?           @unique @map("clerk_org_id")
+  clerkUserId           String?           @map("clerk_user_id")
+  stripeCustomerId      String?           @unique @map("stripe_customer_id")
+  
+  // Relations
+  menuItems             MenuItem[]
+  orders                Order[]
+  calls                 Call[]
+  subscription          Subscription?
+  
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+
+  @@index([clerkUserId])
+  @@index([isActive])
+  @@map("restaurants")
+}
+
+model MenuItem {
+  id                    String            @id @default(cuid())
+  restaurantId          String            @map("restaurant_id")
+  name                  String
+  description           String?
+  price                 Decimal           @db.Decimal(10, 2)
+  category              String            // e.g., "Appetizers", "Entrees", "Drinks"
+  imageUrl              String?           @map("image_url")
+  isAvailable           Boolean           @default(true) @map("is_available")
+  sortOrder             Int               @default(0) @map("sort_order")
+  
+  // Relations
+  restaurant            Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  modifiers             MenuModifier[]
+  orderItems            OrderItem[]
+  
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+
+  @@index([restaurantId, category])
+  @@index([restaurantId, isAvailable])
+  @@map("menu_items")
+}
+
+model MenuModifier {
+  id                    String            @id @default(cuid())
+  menuItemId            String            @map("menu_item_id")
+  name                  String            // e.g., "Extra Cheese", "No Onions"
+  price                 Decimal           @default(0) @db.Decimal(10, 2)
+  isDefault             Boolean           @default(false) @map("is_default")
+  group                 String?           // e.g., "Size", "Toppings", "Sides"
+  
+  // Relations
+  menuItem              MenuItem          @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  orderItemModifiers    OrderItemModifier[]
+  
+  createdAt             DateTime          @default(now()) @map("created_at")
+
+  @@index([menuItemId])
+  @@map("menu_modifiers")
+}
+
+model Order {
+  id                    String            @id @default(cuid())
+  restaurantId          String            @map("restaurant_id")
+  orderNumber           Int               @map("order_number") // Sequential per restaurant
+  customerPhone         String?           @map("customer_phone")
+  customerName          String?           @map("customer_name")
+  status                OrderStatus       @default(NEW)
+  totalAmount           Decimal           @default(0) @db.Decimal(10, 2) @map("total_amount")
+  notes                 String?
+  estimatedPickupTime   DateTime?         @map("estimated_pickup_time")
+  
+  // Relations
+  restaurant            Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  items                 OrderItem[]
+  call                  Call?             @relation(fields: [callId], references: [id])
+  callId                String?           @unique @map("call_id")
+  
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+
+  @@index([restaurantId, status])
+  @@index([restaurantId, createdAt])
+  @@index([customerPhone])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                    String            @id @default(cuid())
+  orderId               String            @map("order_id")
+  menuItemId            String            @map("menu_item_id")
+  quantity              Int               @default(1)
+  unitPrice             Decimal           @db.Decimal(10, 2) @map("unit_price")
+  notes                 String?
+  
+  // Relations
+  order                 Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem              MenuItem          @relation(fields: [menuItemId], references: [id])
+  modifiers             OrderItemModifier[]
+  
+  createdAt             DateTime          @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model OrderItemModifier {
+  id                    String            @id @default(cuid())
+  orderItemId           String            @map("order_item_id")
+  menuModifierId        String            @map("menu_modifier_id")
+  price                 Decimal           @db.Decimal(10, 2)
+  
+  // Relations
+  orderItem             OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  menuModifier          MenuModifier      @relation(fields: [menuModifierId], references: [id])
+
+  @@index([orderItemId])
+  @@map("order_item_modifiers")
+}
+
+model Call {
+  id                    String            @id @default(cuid())
+  restaurantId          String            @map("restaurant_id")
+  vapiCallId            String?           @unique @map("vapi_call_id")
+  customerPhone         String?           @map("customer_phone")
+  duration              Int?              // Duration in seconds
+  status                CallStatus        @default(RINGING)
+  transcript            String?           @db.Text
+  summary               String?
+  sentiment             String?           // positive, neutral, negative
+  
+  // Relations
+  restaurant            Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  order                 Order?
+  
+  startedAt             DateTime?         @map("started_at")
+  endedAt               DateTime?         @map("ended_at")
+  createdAt             DateTime          @default(now()) @map("created_at")
+
+  @@index([restaurantId, createdAt])
+  @@index([restaurantId, status])
+  @@index([customerPhone])
+  @@map("calls")
+}
+
+model Subscription {
+  id                    String            @id @default(cuid())
+  restaurantId          String            @unique @map("restaurant_id")
+  tier                  SubscriptionTier  @default(FREE_TRIAL)
+  stripeSubscriptionId  String?           @unique @map("stripe_subscription_id")
+  status                SubscriptionStatus @default(TRIALING)
+  
+  currentPeriodStart    DateTime?         @map("current_period_start")
+  currentPeriodEnd      DateTime?         @map("current_period_end")
+  trialEndsAt           DateTime?         @map("trial_ends_at")
+  
+  callsUsed             Int               @default(0) @map("calls_used")
+  callsLimit            Int               @default(50) @map("calls_limit") // 50 for trial, 500 starter, -1 unlimited
+  
+  // Relations
+  restaurant            Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([tier])
+  @@map("subscriptions")
+}
