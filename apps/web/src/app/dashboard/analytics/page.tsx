@@ -9,7 +9,6 @@ import {
   TrendingUp,
   CheckCircle2,
   XCircle,
-  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPrice } from "@/lib/utils";
