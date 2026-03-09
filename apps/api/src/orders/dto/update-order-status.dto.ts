@@ -10,5 +10,5 @@ export class UpdateOrderStatusDto {
   @ApiPropertyOptional()
   @IsDateString()
   @IsOptional()
-  estimatedReady?: string;
+  estimatedPickupTime?: string;
 }
