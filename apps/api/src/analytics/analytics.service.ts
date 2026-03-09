@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { CallStatus, OrderStatus } from "@prisma/client";
+import { CallStatus, OrderStatus, Prisma } from "@prisma/client";
 
 @Injectable()
 export class AnalyticsService {
@@ -87,7 +87,7 @@ export class AnalyticsService {
 
     return {
       period: `${days}d`,
-      byStatus: calls.map((c) => ({ status: c.status, count: c._count })),
+      byStatus: calls.map((c: { status: CallStatus; _count: number }) => ({ status: c.status, count: c._count })),
       averageDuration: avgDuration._avg.duration || 0,
     };
   }
@@ -108,9 +108,9 @@ export class AnalyticsService {
 
     return {
       period: `${days}d`,
-      totalRevenue: orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0),
+      totalRevenue: orders.reduce((sum: number, o: { totalAmount: Prisma.Decimal | null }) => sum + Number(o.totalAmount || 0), 0),
       orderCount: orders.length,
-      orders: orders.map((o) => ({
+      orders: orders.map((o: { totalAmount: Prisma.Decimal | null; createdAt: Date }) => ({
         amount: o.totalAmount,
         date: o.createdAt,
       })),
@@ -128,13 +128,13 @@ export class AnalyticsService {
     });
 
     const menuItems = await this.prisma.menuItem.findMany({
-      where: { id: { in: items.map((i) => i.menuItemId) } },
+      where: { id: { in: items.map((i: { menuItemId: string }) => i.menuItemId) } },
       select: { id: true, name: true, price: true },
     });
 
-    const menuMap = new Map(menuItems.map((m) => [m.id, m]));
+    const menuMap = new Map(menuItems.map((m: { id: string; name: string; price: Prisma.Decimal }) => [m.id, m]));
 
-    return items.map((item) => ({
+    return items.map((item: { menuItemId: string; _sum: { quantity: number | null }; _count: number }) => ({
       menuItem: menuMap.get(item.menuItemId),
       totalOrdered: item._sum.quantity,
       orderCount: item._count,
