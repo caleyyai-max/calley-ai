@@ -166,7 +166,7 @@ export class OrdersService {
       where: { id },
       data: {
         status: dto.status,
-        ...(dto.estimatedReady && { estimatedReady: dto.estimatedReady }),
+        ...(dto.estimatedPickupTime && { estimatedPickupTime: dto.estimatedPickupTime }),
       },
       include: {
         items: { include: { menuItem: true } },
