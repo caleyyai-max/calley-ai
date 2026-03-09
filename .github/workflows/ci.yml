@@ -47,7 +47,8 @@ jobs:
         run: npm install
 
       - name: Generate Prisma client
-        run: npx prisma generate
+        working-directory: apps/api
+        run: npx prisma generate --schema=../../prisma/schema.prisma
 
       - name: Type check API
         working-directory: apps/api
@@ -80,7 +81,8 @@ jobs:
         run: npm install
 
       - name: Generate Prisma client
-        run: npx prisma generate
+        working-directory: apps/api
+        run: npx prisma generate --schema=../../prisma/schema.prisma
 
       - name: Build API
         working-directory: apps/api
