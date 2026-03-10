@@ -2,7 +2,7 @@ import { Controller, Post, Body, Req, HttpCode, HttpStatus } from "@nestjs/commo
 import { ApiTags, ApiOperation, ApiExcludeEndpoint } from "@nestjs/swagger";
 import { WebhooksService } from "./webhooks.service";
 import { RawBodyRequest } from "@nestjs/common";
-import { Request } from "express";
+import type { Request } from "express";
 
 @ApiTags("webhooks")
 @Controller("webhooks")

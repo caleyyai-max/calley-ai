@@ -1,6 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { CallStatus, OrderStatus, Prisma } from "@prisma/client";
+
+// Use string literals instead of enum imports to avoid Prisma client generation path issues
+const CALL_STATUS_COMPLETED = "COMPLETED";
+const ORDER_STATUS_COMPLETED = "COMPLETED";
 
 @Injectable()
 export class AnalyticsService {
@@ -20,7 +23,7 @@ export class AnalyticsService {
         this.prisma.call.count({
           where: {
             restaurantId,
-            status: CallStatus.COMPLETED,
+            status: CALL_STATUS_COMPLETED,
             createdAt: { gte: since },
           },
         }),
@@ -30,14 +33,14 @@ export class AnalyticsService {
         this.prisma.order.count({
           where: {
             restaurantId,
-            status: OrderStatus.COMPLETED,
+            status: ORDER_STATUS_COMPLETED,
             createdAt: { gte: since },
           },
         }),
         this.prisma.order.aggregate({
           where: {
             restaurantId,
-            status: OrderStatus.COMPLETED,
+            status: ORDER_STATUS_COMPLETED,
             createdAt: { gte: since },
           },
           _sum: { totalAmount: true },
@@ -57,10 +60,10 @@ export class AnalyticsService {
         conversionRate: totalCalls > 0 ? (totalOrders / totalCalls) * 100 : 0,
       },
       revenue: {
-        total: revenue._sum.totalAmount || 0,
+        total: Number(revenue._sum.totalAmount ?? 0),
         averageOrderValue:
           completedOrders > 0
-            ? (revenue._sum.totalAmount || 0) / completedOrders
+            ? Number(revenue._sum.totalAmount ?? 0) / completedOrders
             : 0,
       },
     };
@@ -79,7 +82,7 @@ export class AnalyticsService {
     const avgDuration = await this.prisma.call.aggregate({
       where: {
         restaurantId,
-        status: CallStatus.COMPLETED,
+        status: CALL_STATUS_COMPLETED,
         createdAt: { gte: since },
       },
       _avg: { duration: true },
@@ -87,7 +90,7 @@ export class AnalyticsService {
 
     return {
       period: `${days}d`,
-      byStatus: calls.map((c: { status: CallStatus; _count: number }) => ({ status: c.status, count: c._count })),
+      byStatus: calls.map((c: any) => ({ status: c.status, count: c._count })),
       averageDuration: avgDuration._avg.duration || 0,
     };
   }
@@ -99,7 +102,7 @@ export class AnalyticsService {
     const orders = await this.prisma.order.findMany({
       where: {
         restaurantId,
-        status: OrderStatus.COMPLETED,
+        status: ORDER_STATUS_COMPLETED,
         createdAt: { gte: since },
       },
       select: { totalAmount: true, createdAt: true },
@@ -108,9 +111,9 @@ export class AnalyticsService {
 
     return {
       period: `${days}d`,
-      totalRevenue: orders.reduce((sum: number, o: { totalAmount: Prisma.Decimal | null }) => sum + Number(o.totalAmount || 0), 0),
+      totalRevenue: orders.reduce((sum: number, o: any) => sum + Number(o.totalAmount || 0), 0),
       orderCount: orders.length,
-      orders: orders.map((o: { totalAmount: Prisma.Decimal | null; createdAt: Date }) => ({
+      orders: orders.map((o: any) => ({
         amount: o.totalAmount,
         date: o.createdAt,
       })),
@@ -120,7 +123,6 @@ export class AnalyticsService {
   async getPopularItems(restaurantId: string, limit: number) {
     const items = await this.prisma.orderItem.groupBy({
       by: ["menuItemId"],
-      where: { order: { restaurantId } },
       _sum: { quantity: true },
       _count: true,
       orderBy: { _sum: { quantity: "desc" } },
@@ -128,13 +130,13 @@ export class AnalyticsService {
     });
 
     const menuItems = await this.prisma.menuItem.findMany({
-      where: { id: { in: items.map((i: { menuItemId: string }) => i.menuItemId) } },
+      where: { id: { in: items.map((i: any) => i.menuItemId) } },
       select: { id: true, name: true, price: true },
     });
 
-    const menuMap = new Map(menuItems.map((m: { id: string; name: string; price: Prisma.Decimal }) => [m.id, m]));
+    const menuMap = new Map(menuItems.map((m: any) => [m.id, m]));
 
-    return items.map((item: { menuItemId: string; _sum: { quantity: number | null }; _count: number }) => ({
+    return items.map((item: any) => ({
       menuItem: menuMap.get(item.menuItemId),
       totalOrdered: item._sum.quantity,
       orderCount: item._count,

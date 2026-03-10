@@ -83,7 +83,7 @@ export class VapiFunctionHandler {
           return this.handleAddToOrder(
             callContext.callId,
             callContext.restaurantId,
-            parameters,
+            parameters as { item_name: string; quantity?: number; modifiers?: string[]; special_instructions?: string },
           );
 
         case 'remove_from_order':
@@ -98,7 +98,7 @@ export class VapiFunctionHandler {
         case 'place_order':
           return this.handlePlaceOrder(
             callContext.callId,
-            parameters,
+            parameters as { customer_name?: string; pickup_time?: string },
           );
 
         case 'check_hours':
@@ -142,12 +142,12 @@ export class VapiFunctionHandler {
     let items = menuData;
     if (category) {
       items = menuData.filter(
-        (item) =>
+        (item: any) =>
           item.category.toLowerCase().includes(category.toLowerCase()),
       );
 
       if (items.length === 0) {
-        const categories = [...new Set(menuData.map((i) => i.category))];
+        const categories = [...new Set(menuData.map((i: any) => i.category))];
         return `We don't have a "${category}" category. Our categories are: ${categories.join(', ')}. Which would you like to hear about?`;
       }
     }
@@ -163,9 +163,9 @@ export class VapiFunctionHandler {
     for (const [cat, catItems] of Object.entries(grouped)) {
       response += `In ${cat}, we have: `;
       response += catItems
-        .map((i) => {
+        .map((i: any) => {
           let desc = `${i.name} for ${i.price}`;
-          if (i.description) desc += ` — ${i.description}`;
+          if (i.description) desc += ` \u2014 ${i.description}`;
           return desc;
         })
         .join('. ');
@@ -207,7 +207,7 @@ export class VapiFunctionHandler {
       // Suggest similar items
       const suggestions = this.getSimilarItems(params.item_name, menuItems, 3);
       if (suggestions.length > 0) {
-        return `I couldn't find "${params.item_name}" on the menu. Did you mean: ${suggestions.map((s) => s.name).join(', ')}?`;
+        return `I couldn't find "${params.item_name}" on the menu. Did you mean: ${suggestions.map((s: any) => s.name).join(', ')}?`;
       }
       return `I'm sorry, I couldn't find "${params.item_name}" on our menu. Would you like to hear what we have available?`;
     }
@@ -217,7 +217,7 @@ export class VapiFunctionHandler {
     if (params.modifiers && params.modifiers.length > 0) {
       for (const modName of params.modifiers) {
         const matchedMod = matchedItem.modifiers.find(
-          (m) => m.name.toLowerCase().includes(modName.toLowerCase()),
+          (m: any) => m.name.toLowerCase().includes(modName.toLowerCase()),
         );
         if (matchedMod) {
           resolvedModifiers.push({
@@ -244,7 +244,7 @@ export class VapiFunctionHandler {
     // Build confirmation message
     const itemTotal =
       (cartItem.unitPrice +
-        resolvedModifiers.reduce((sum, m) => sum + m.price, 0)) *
+        resolvedModifiers.reduce((sum: number, m: any) => sum + m.price, 0)) *
       quantity;
 
     let confirmation = `Got it! I've added `;
@@ -252,14 +252,14 @@ export class VapiFunctionHandler {
     confirmation += matchedItem.name;
 
     if (resolvedModifiers.length > 0) {
-      confirmation += ` with ${resolvedModifiers.map((m) => m.name).join(' and ')}`;
+      confirmation += ` with ${resolvedModifiers.map((m: any) => m.name).join(' and ')}`;
     }
 
     if (params.special_instructions) {
       confirmation += ` (${params.special_instructions})`;
     }
 
-    confirmation += ` — that's $${itemTotal.toFixed(2)}`;
+    confirmation += ` \u2014 that's $${itemTotal.toFixed(2)}`;
     confirmation += '. Would you like anything else?';
 
     return confirmation;
@@ -275,12 +275,12 @@ export class VapiFunctionHandler {
     const cart = this.activeCarts.get(callId)!;
 
     const index = cart.items.findIndex(
-      (item) =>
+      (item: any) =>
         item.name.toLowerCase().includes(itemName.toLowerCase()),
     );
 
     if (index === -1) {
-      const currentItems = cart.items.map((i) => i.name).join(', ');
+      const currentItems = cart.items.map((i: any) => i.name).join(', ');
       if (cart.items.length === 0) {
         return 'Your order is currently empty, so there\'s nothing to remove.';
       }
@@ -305,7 +305,7 @@ export class VapiFunctionHandler {
     const itemDescriptions: string[] = [];
 
     for (const item of cart.items) {
-      const modifierTotal = item.modifiers.reduce((sum, m) => sum + m.price, 0);
+      const modifierTotal = item.modifiers.reduce((sum: number, m: any) => sum + m.price, 0);
       const itemTotal = (item.unitPrice + modifierTotal) * item.quantity;
       subtotal += itemTotal;
 
@@ -314,14 +314,14 @@ export class VapiFunctionHandler {
       desc += item.name;
 
       if (item.modifiers.length > 0) {
-        desc += ` with ${item.modifiers.map((m) => m.name).join(', ')}`;
+        desc += ` with ${item.modifiers.map((m: any) => m.name).join(', ')}`;
       }
 
       if (item.specialInstructions) {
         desc += ` (${item.specialInstructions})`;
       }
 
-      desc += ` — $${itemTotal.toFixed(2)}`;
+      desc += ` \u2014 $${itemTotal.toFixed(2)}`;
       itemDescriptions.push(desc);
     }
 
@@ -358,7 +358,7 @@ export class VapiFunctionHandler {
       });
       dbCallId = callRecord?.id;
     } catch {
-      // Call record may not exist yet — that's OK
+      // Call record may not exist yet -- that's OK
     }
 
     // Build the order DTO
@@ -370,15 +370,15 @@ export class VapiFunctionHandler {
         params.customer_name ? `Name: ${params.customer_name}` : null,
         params.pickup_time ? `Pickup: ${params.pickup_time}` : null,
         ...cart.items
-          .filter((i) => i.specialInstructions)
-          .map((i) => `${i.name}: ${i.specialInstructions}`),
+          .filter((i: any) => i.specialInstructions)
+          .map((i: any) => `${i.name}: ${i.specialInstructions}`),
       ]
         .filter(Boolean)
         .join(' | '),
-      items: cart.items.map((item) => ({
+      items: cart.items.map((item: any) => ({
         menuItemId: item.menuItemId,
         quantity: item.quantity,
-        modifierIds: item.modifiers.map((m) => m.id),
+        modifierIds: item.modifiers.map((m: any) => m.id),
         notes: item.specialInstructions,
       })),
     };
@@ -454,13 +454,13 @@ export class VapiFunctionHandler {
 
     // Exact match first
     const exact = menuItems.find(
-      (item) => item.name.toLowerCase() === normalizedQuery,
+      (item: any) => item.name.toLowerCase() === normalizedQuery,
     );
     if (exact) return exact;
 
     // Contains match
     const contains = menuItems.find(
-      (item) =>
+      (item: any) =>
         item.name.toLowerCase().includes(normalizedQuery) ||
         normalizedQuery.includes(item.name.toLowerCase()),
     );
@@ -473,7 +473,7 @@ export class VapiFunctionHandler {
 
     for (const item of menuItems) {
       const itemWords = item.name.toLowerCase().split(/\s+/);
-      const overlap = queryWords.filter((w) =>
+      const overlap = queryWords.filter((w: any) =>
         itemWords.some((iw: string) => iw.includes(w) || w.includes(iw)),
       ).length;
 
@@ -498,19 +498,19 @@ export class VapiFunctionHandler {
   ): any[] {
     const queryWords = query.toLowerCase().split(/\s+/);
 
-    const scored = menuItems.map((item) => {
+    const scored = menuItems.map((item: any) => {
       const itemWords = item.name.toLowerCase().split(/\s+/);
-      const overlap = queryWords.filter((w) =>
+      const overlap = queryWords.filter((w: any) =>
         itemWords.some((iw: string) => iw.includes(w) || w.includes(iw)),
       ).length;
       return { item, score: overlap };
     });
 
     return scored
-      .filter((s) => s.score > 0)
-      .sort((a, b) => b.score - a.score)
+      .filter((s: any) => s.score > 0)
+      .sort((a: any, b: any) => b.score - a.score)
       .slice(0, limit)
-      .map((s) => s.item);
+      .map((s: any) => s.item);
   }
 
   /**

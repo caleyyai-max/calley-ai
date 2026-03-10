@@ -1,14 +1,9 @@
-import {
-  Injectable,
-  OnModuleInit,
-  OnModuleDestroy,
-  Logger,
-} from "@nestjs/common";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from "@nestjs/common";
+import { PrismaClient } from "@prisma/client";
 
 @Injectable()
 export class PrismaService
-  extends PrismaClient<Prisma.PrismaClientOptions, "query" | "error" | "warn">
+  extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(PrismaService.name);
@@ -18,82 +13,63 @@ export class PrismaService
       log: [
         { emit: "event", level: "query" },
         { emit: "event", level: "error" },
+        { emit: "event", level: "info" },
         { emit: "event", level: "warn" },
       ],
-      errorFormat: "pretty",
     });
   }
 
-  async onModuleInit(): Promise<void> {
-    // Log slow queries in development
-    if (process.env.NODE_ENV !== "production") {
-      this.$on("query", (event: Prisma.QueryEvent) => {
-        if (event.duration > 100) {
-          this.logger.warn(
-            `Slow query (${event.duration}ms): ${event.query}`
-          );
-        }
-      });
-    }
-
-    this.$on("error", (event: Prisma.LogEvent) => {
-      this.logger.error(`Database error: ${event.message}`);
+  async onModuleInit() {
+    // Set up logging
+    (this as any).$on("query", (e: any) => {
+      if (process.env.NODE_ENV === "development") {
+        this.logger.debug(`Query: ${e.query} — Duration: ${e.duration}ms`);
+      }
     });
 
-    this.$on("warn", (event: Prisma.LogEvent) => {
-      this.logger.warn(`Database warning: ${event.message}`);
+    (this as any).$on("error", (e: any) => {
+      this.logger.error(`Prisma error: ${e.message}`);
     });
 
-    try {
-      await this.$connect();
-      this.logger.log("Database connection established");
-    } catch (error) {
-      this.logger.error("Failed to connect to database", error);
-      throw error;
-    }
+    (this as any).$on("info", (e: any) => {
+      this.logger.log(`Prisma info: ${e.message}`);
+    });
+
+    (this as any).$on("warn", (e: any) => {
+      this.logger.warn(`Prisma warning: ${e.message}`);
+    });
+
+    await this.$connect();
+    this.logger.log("Database connection established");
   }
 
-  async onModuleDestroy(): Promise<void> {
+  async onModuleDestroy() {
     await this.$disconnect();
     this.logger.log("Database connection closed");
   }
 
-  async cleanDatabase(): Promise<void> {
-    if (process.env.NODE_ENV !== "test") {
-      throw new Error("cleanDatabase is only available in test environment");
-    }
-
-    const deleteOrder = [
-      "orderItemModifier",
-      "orderItem",
-      "order",
-      "menuModifier",
-      "menuItem",
-      "call",
-      "subscription",
-      "restaurant",
-    ];
-
-    for (const modelName of deleteOrder) {
-      const model = (this as any)[modelName];
-      if (model?.deleteMany) {
-        await model.deleteMany();
-      }
-    }
+  /**
+   * Execute operations in a transaction with serializable isolation.
+   */
+  async executeInTransaction<T>(
+    fn: (prisma: PrismaService) => Promise<T>,
+  ): Promise<T> {
+    return this.$transaction(async (prisma) => {
+      return fn(prisma as unknown as PrismaService);
+    }, {
+      isolationLevel: "Serializable" as any,
+    });
   }
 
-  async executeInTransaction<T>(
-    fn: (prisma: Prisma.TransactionClient) => Promise<T>,
-    options?: {
-      maxWait?: number;
-      timeout?: number;
-      isolationLevel?: Prisma.TransactionIsolationLevel;
+  /**
+   * Health check for the database connection.
+   */
+  async isHealthy(): Promise<boolean> {
+    try {
+      await this.$queryRaw`SELECT 1`;
+      return true;
+    } catch {
+      return false;
     }
-  ): Promise<T> {
-    return this.$transaction(fn, {
-      maxWait: options?.maxWait ?? 5000,
-      timeout: options?.timeout ?? 10000,
-      isolationLevel: options?.isolationLevel,
-    });
   }
 }

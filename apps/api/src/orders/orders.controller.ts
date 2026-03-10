@@ -2,69 +2,76 @@ import {
   Controller,
   Get,
   Post,
-  Patch,
-  Body,
+  Put,
   Param,
+  Body,
   Query,
+  ParseIntPipe,
+  DefaultValuePipe,
   HttpCode,
   HttpStatus,
 } from "@nestjs/common";
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from "@nestjs/swagger";
+import { ApiTags, ApiOperation, ApiQuery } from "@nestjs/swagger";
 import { OrdersService } from "./orders.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { UpdateOrderStatusDto } from "./dto/update-order-status.dto";
-import { OrderStatus } from "@prisma/client";
 
-@ApiTags("orders")
-@ApiBearerAuth()
-@Controller("orders")
+const ORDER_STATUS = {
+  NEW: "NEW",
+  CONFIRMED: "CONFIRMED",
+  PREPARING: "PREPARING",
+  READY: "READY",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED",
+} as const;
+
+@ApiTags("Orders")
+@Controller("api/restaurants/:restaurantId/orders")
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: "Create a new order" })
-  async create(@Body() dto: CreateOrderDto) {
-    return this.ordersService.create(dto);
-  }
-
-  @Get("restaurant/:restaurantId")
-  @ApiOperation({ summary: "Get orders by restaurant" })
-  @ApiQuery({ name: "status", required: false, enum: OrderStatus })
-  @ApiQuery({ name: "page", required: false, type: Number })
-  @ApiQuery({ name: "limit", required: false, type: Number })
-  async findByRestaurant(
+  create(
     @Param("restaurantId") restaurantId: string,
-    @Query("status") status?: OrderStatus,
-    @Query("page") page?: number,
-    @Query("limit") limit?: number
+    @Body() dto: CreateOrderDto
   ) {
-    return this.ordersService.findByRestaurant(
-      restaurantId,
-      status,
-      page || 1,
-      limit || 20
-    );
+    return this.ordersService.create(restaurantId, dto);
   }
 
-  @Get("restaurant/:restaurantId/active")
-  @ApiOperation({ summary: "Get active orders for restaurant" })
-  async getActiveOrders(@Param("restaurantId") restaurantId: string) {
-    return this.ordersService.getActiveOrders(restaurantId);
+  @Get()
+  @ApiOperation({ summary: "List orders for a restaurant" })
+  @ApiQuery({ name: "page", required: false })
+  @ApiQuery({ name: "limit", required: false })
+  @ApiQuery({ name: "status", required: false })
+  findAll(
+    @Param("restaurantId") restaurantId: string,
+    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query("limit", new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query("status") status?: string
+  ) {
+    return this.ordersService.findByRestaurant(restaurantId, page, limit, status);
   }
 
-  @Get(":id")
-  @ApiOperation({ summary: "Get order by ID" })
-  async findById(@Param("id") id: string) {
-    return this.ordersService.findById(id);
+  @Get("active")
+  @ApiOperation({ summary: "Get active orders" })
+  getActive(@Param("restaurantId") restaurantId: string) {
+    return this.ordersService.findByRestaurant(restaurantId, 1, 50, ORDER_STATUS.NEW);
   }
 
-  @Patch(":id/status")
+  @Get(":orderId")
+  @ApiOperation({ summary: "Get order details" })
+  findOne(@Param("orderId") orderId: string) {
+    return this.ordersService.findOne(orderId);
+  }
+
+  @Put(":orderId/status")
   @ApiOperation({ summary: "Update order status" })
-  async updateStatus(
-    @Param("id") id: string,
+  updateStatus(
+    @Param("orderId") orderId: string,
     @Body() dto: UpdateOrderStatusDto
   ) {
-    return this.ordersService.updateStatus(id, dto);
+    return this.ordersService.updateStatus(orderId, dto);
   }
 }

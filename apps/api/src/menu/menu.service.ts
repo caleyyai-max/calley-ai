@@ -9,143 +9,96 @@ export class MenuService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async createItem(dto: CreateMenuItemDto) {
-    const item = await this.prisma.menuItem.create({
+  async create(restaurantId: string, dto: CreateMenuItemDto) {
+    const maxPosition = await this.prisma.menuItem.aggregate({
+      where: { restaurantId, category: dto.category },
+      _max: { sortOrder: true },
+    });
+
+    const menuItem = await this.prisma.menuItem.create({
       data: {
-        restaurantId: dto.restaurantId,
+        restaurantId,
         name: dto.name,
         description: dto.description,
         price: dto.price,
         category: dto.category,
-        imageUrl: dto.imageUrl,
         isAvailable: dto.isAvailable ?? true,
-        sortOrder: dto.sortOrder ?? 0,
-        modifiers: dto.modifiers
-          ? {
-              create: dto.modifiers.map((mod) => ({
-                name: mod.name,
-                price: mod.price ?? 0,
-                isDefault: mod.isDefault ?? false,
-                group: mod.group,
-              })),
-            }
-          : undefined,
+        imageUrl: dto.imageUrl,
+        modifiers: dto.modifiers ?? [],
+        sortOrder: (maxPosition._max.sortOrder ?? 0) + 1,
       },
-      include: { modifiers: true },
     });
 
-    this.logger.log(`Menu item created: ${item.id} (${item.name})`);
-    return item;
+    this.logger.log(
+      `Menu item created: ${menuItem.id} "${menuItem.name}" for restaurant ${restaurantId}`
+    );
+    return menuItem;
   }
 
-  async findByRestaurant(restaurantId: string) {
+  async findByRestaurant(restaurantId: string, category?: string) {
+    const where: any = { restaurantId };
+    if (category) where.category = category;
+
     const items = await this.prisma.menuItem.findMany({
-      where: { restaurantId },
-      include: { modifiers: true },
-      orderBy: [{ category: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+      where,
+      orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
     });
 
-    // Group by category
-    const categories: Record<string, typeof items> = {};
-    for (const item of items) {
-      if (!categories[item.category]) {
-        categories[item.category] = [];
-      }
-      categories[item.category].push(item);
-    }
+    const grouped = items.reduce(
+      (acc: Record<string, any[]>, item: { category: string }) => {
+        if (!acc[item.category]) acc[item.category] = [];
+        acc[item.category].push(item);
+        return acc;
+      },
+      {} as Record<string, any[]>
+    );
 
-    return {
-      items,
-      categories: Object.entries(categories).map(([name, items]) => ({
-        name,
-        items,
-        count: items.length,
-      })),
-      totalItems: items.length,
-    };
+    return { items, grouped };
   }
 
-  async findById(id: string) {
-    const item = await this.prisma.menuItem.findUnique({
-      where: { id },
-      include: { modifiers: true, restaurant: { select: { id: true, name: true } } },
-    });
-
-    if (!item) {
-      throw new NotFoundException(`Menu item with ID ${id} not found`);
-    }
-
+  async findOne(id: string) {
+    const item = await this.prisma.menuItem.findUnique({ where: { id } });
+    if (!item) throw new NotFoundException(`Menu item ${id} not found`);
     return item;
   }
 
   async update(id: string, dto: UpdateMenuItemDto) {
-    await this.findById(id);
-
-    return this.prisma.menuItem.update({
-      where: { id },
-      data: {
-        name: dto.name,
-        description: dto.description,
-        price: dto.price,
-        category: dto.category,
-        imageUrl: dto.imageUrl,
-        isAvailable: dto.isAvailable,
-        sortOrder: dto.sortOrder,
-      },
-      include: { modifiers: true },
-    });
+    const item = await this.prisma.menuItem.findUnique({ where: { id } });
+    if (!item) throw new NotFoundException(`Menu item ${id} not found`);
+    return this.prisma.menuItem.update({ where: { id }, data: dto });
   }
 
-  async delete(id: string) {
-    await this.findById(id);
+  async remove(id: string) {
+    const item = await this.prisma.menuItem.findUnique({ where: { id } });
+    if (!item) throw new NotFoundException(`Menu item ${id} not found`);
     await this.prisma.menuItem.delete({ where: { id } });
-    this.logger.log(`Menu item deleted: ${id}`);
-    return { deleted: true };
+    return { deleted: true, id };
   }
 
-  async toggleAvailability(id: string) {
-    const item = await this.findById(id);
-
+  async updateAvailability(id: string, isAvailable: boolean) {
     return this.prisma.menuItem.update({
       where: { id },
-      data: { isAvailable: !item.isAvailable },
+      data: { isAvailable },
     });
   }
 
-  async reorder(restaurantId: string, itemOrders: { id: string; sortOrder: number }[]) {
-    await this.prisma.$transaction(
-      itemOrders.map((item) =>
-        this.prisma.menuItem.update({
-          where: { id: item.id, restaurantId },
-          data: { sortOrder: item.sortOrder },
-        })
-      )
-    );
+  async getMenuForVapi(restaurantId: string): Promise<string> {
+    const { grouped } = await this.findByRestaurant(restaurantId);
 
-    return { updated: itemOrders.length };
-  }
+    let menuText = "";
+    for (const [category, items] of Object.entries(grouped)) {
+      menuText += `\n${category}:\n`;
+      (items as any[]).forEach((item: { name: string; price: any; description?: string; modifiers?: any[] }) => {
+        menuText += `  - ${item.name}: $${Number(item.price).toFixed(2)}`;
+        if (item.description) menuText += ` - ${item.description}`;
+        menuText += "\n";
+        if (item.modifiers && Array.isArray(item.modifiers) && item.modifiers.length > 0) {
+          const mods = item.modifiers as { name: string; price: number }[];
+          menuText += `    Modifiers: ${mods.map((m: { name: string; price: number }) => `${m.name} (+$${m.price.toFixed(2)})`).join(", ")}\n`;
+        }
+      });
+    }
 
-  /**
-   * Get menu formatted for the AI voice agent.
-   * Returns a simplified structure optimized for Vapi.ai context.
-   */
-  async getMenuForAI(restaurantId: string) {
-    const items = await this.prisma.menuItem.findMany({
-      where: { restaurantId, isAvailable: true },
-      include: { modifiers: true },
-      orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
-    });
-
-    return items.map((item) => ({
-      name: item.name,
-      description: item.description,
-      price: `$${Number(item.price).toFixed(2)}`,
-      category: item.category,
-      modifiers: item.modifiers.map((m) => ({
-        name: m.name,
-        price: Number(m.price) > 0 ? `+$${Number(m.price).toFixed(2)}` : "included",
-        group: m.group,
-      })),
-    }));
+    return menuText.trim();
   }
 }

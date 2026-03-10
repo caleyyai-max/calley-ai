@@ -2,7 +2,15 @@ import { Injectable, NotFoundException, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateCallDto } from "./dto/create-call.dto";
 import { UpdateCallDto } from "./dto/update-call.dto";
-import { CallStatus } from "@prisma/client";
+
+// Use string literals instead of Prisma enum imports
+const CALL_STATUS = {
+  RINGING: "RINGING",
+  IN_PROGRESS: "IN_PROGRESS",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+  MISSED: "MISSED",
+} as const;
 
 @Injectable()
 export class CallsService {
@@ -16,7 +24,7 @@ export class CallsService {
         restaurantId: dto.restaurantId,
         vapiCallId: dto.vapiCallId,
         customerPhone: dto.customerPhone,
-        status: CallStatus.RINGING,
+        status: CALL_STATUS.RINGING,
         startedAt: new Date(),
       },
     });
@@ -96,7 +104,7 @@ export class CallsService {
       where: { id },
       data: {
         ...dto,
-        ...(dto.status === CallStatus.COMPLETED && { endedAt: new Date() }),
+        ...(dto.status === CALL_STATUS.COMPLETED && { endedAt: new Date() }),
       },
     });
   }
@@ -113,7 +121,7 @@ export class CallsService {
     const call = await this.prisma.call.update({
       where: { vapiCallId },
       data: {
-        status: CallStatus.COMPLETED,
+        status: CALL_STATUS.COMPLETED,
         duration: data.duration,
         transcript: data.transcript,
         summary: data.summary,
@@ -151,14 +159,14 @@ export class CallsService {
       this.prisma.call.count({
         where: {
           restaurantId,
-          status: CallStatus.COMPLETED,
+          status: CALL_STATUS.COMPLETED,
           createdAt: { gte: startDate },
         },
       }),
       this.prisma.call.aggregate({
         where: {
           restaurantId,
-          status: CallStatus.COMPLETED,
+          status: CALL_STATUS.COMPLETED,
           createdAt: { gte: startDate },
         },
         _avg: { duration: true },

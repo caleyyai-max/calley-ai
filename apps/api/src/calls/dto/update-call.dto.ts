@@ -5,32 +5,34 @@ import {
   IsInt,
   Min,
 } from "class-validator";
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { CallStatus } from "@prisma/client";
+
+// Use string enum to avoid Prisma client path issues
+enum CallStatusEnum {
+  RINGING = "RINGING",
+  IN_PROGRESS = "IN_PROGRESS",
+  COMPLETED = "COMPLETED",
+  FAILED = "FAILED",
+  MISSED = "MISSED",
+}
 
 export class UpdateCallDto {
-  @ApiPropertyOptional({ enum: CallStatus })
-  @IsEnum(CallStatus)
+  @IsEnum(CallStatusEnum)
   @IsOptional()
-  status?: CallStatus;
+  status?: string;
 
-  @ApiPropertyOptional()
   @IsInt()
   @Min(0)
   @IsOptional()
   duration?: number;
 
-  @ApiPropertyOptional()
   @IsString()
   @IsOptional()
   transcript?: string;
 
-  @ApiPropertyOptional()
   @IsString()
   @IsOptional()
   summary?: string;
 
-  @ApiPropertyOptional()
   @IsString()
   @IsOptional()
   sentiment?: string;

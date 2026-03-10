@@ -1,14 +1,19 @@
-import { IsEnum, IsOptional, IsDateString } from "class-validator";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { OrderStatus } from "@prisma/client";
+import { IsEnum, IsOptional, IsString } from "class-validator";
+
+enum OrderStatusEnum {
+  NEW = "NEW",
+  CONFIRMED = "CONFIRMED",
+  PREPARING = "PREPARING",
+  READY = "READY",
+  COMPLETED = "COMPLETED",
+  CANCELLED = "CANCELLED",
+}
 
 export class UpdateOrderStatusDto {
-  @ApiProperty({ enum: OrderStatus })
-  @IsEnum(OrderStatus)
-  status: OrderStatus;
+  @IsEnum(OrderStatusEnum)
+  status!: string;
 
-  @ApiPropertyOptional()
-  @IsDateString()
   @IsOptional()
-  estimatedPickupTime?: string;
+  @IsString()
+  reason?: string;
 }

@@ -9,7 +9,7 @@ import { BillingService } from "../billing/billing.service";
 import { CallsService } from "../calls/calls.service";
 import { VapiFunctionHandler } from "../vapi/vapi-function-handler";
 import Stripe from "stripe";
-import { Request } from "express";
+import type { Request } from "express";
 
 @Injectable()
 export class WebhooksService {
