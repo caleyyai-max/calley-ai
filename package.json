@@ -14,7 +14,7 @@
     "db:studio": "npx prisma studio"
   },
   "dependencies": {
-    "@prisma/client": "^5.10.0",
+    "@prisma/client": "^7.5.0",
     "prisma": "^5.10.0"
   }
 }
